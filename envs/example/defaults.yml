@@ -21,6 +21,9 @@ secrets:
   horizon_secret_key:           asdf
   glance_sync:      ADQ64XUQLUWH75M634RVBLP55RKPGGOWG
   monitor_password: asdf
+  openldap_root_password: aq1sw2de
+  openldap_user_password: aq1sw2de
+  openldap_config_root_password: aq1sw2de_c
 
 fqdn: openstack.example.com
 swift_fqdn: "{{ fqdn }}"
@@ -389,6 +392,29 @@ keystone:
       public_url: https://{{ endpoints.main }}:9511
       internal_url: https://{{ endpoints.main }}:9511
       admin_url: https://{{ endpoints.main }}:9511
+
+#ldap url used by identity ldap driver in case enabled 
+  ldap:
+    url: ldap://{{ undercloud_floating_ip }}:390
+
+openldap:
+  enabled: False 
+
+  # openldap server settings
+  suffix: "dc=example,dc=org"
+  users_dn: "ou=users,ou=openstack,dc=example,dc=org"
+  groups_dn: "ou=groups,ou=openstack,dc=example,dc=org"
+
+  # keystone user settings, this is used by the keystone ldap driver to
+  # connect to the ldap server, it needs to have read and write access
+  # to the user and group sub trees as set by openldap.users_dn
+  # and openldap.groups_dn respectively
+  openldap_user_name: keystone_user
+  openldap_user_password: {{ secrets.openldap_user_password }}
+  openldap_user_dn: "cn=keystone_user,ou=openstack,dc=example,dc=org"
+  root_password: {{ secrets.openldap_root_password }}
+  config_root_password: {{ secrets.openldap_config_root_password }}
+
 ssl:
   crt: |
     -----BEGIN CERTIFICATE-----

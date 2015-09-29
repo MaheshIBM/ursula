@@ -1,0 +1,76 @@
+---
+- include: logging.yml
+  tags:
+    - logging
+  when: logging.enabled|default('True')|bool
+
+- name: install the openldap packages
+  apt: name={{ item }} state=installed
+  with_items: openldap.ldap_pkgs
+
+- name: create directory for config ldif files
+  file: path={{ openldap.config_dir }}
+        state=directory
+        owner=root
+        group=root
+        mode=0700
+
+- name: template config ldif files
+  template: src={{ item }}
+            dest={{ openldap.config_dir }}
+  with_fileglob: ../templates/{{ openldap.config_dir }}/*
+
+# Ignore error if ldap return code is 20 - LDAP_TYPE_OR_VALUE_EXISTS 
+- name: ensure admin/suffix is created
+  shell: ldapmodify -Y EXTERNAL -H ldapi:///
+         -f {{ openldap.config_dir }}/set_admin.ldif
+  register: set_admin
+  failed_when: set_admin.rc not in [0, 20]
+
+# Ignore error if ldap return code is 68 - LDAP_ALREADY_EXISTS
+- name: ensure base domain is created
+  shell: ldapadd -D {{ openldap.root_dn }} -w {{ openldap.root_password }}
+         -f {{ openldap.config_dir }}/base_domain.ldif
+  register: base_domain
+  failed_when: base_domain.rc not in [0, 68]
+
+# Ignore error if ldap return code is 68 - LDAP_ALREADY_EXISTS
+- name: ensure keystone_user is created
+  shell: ldapadd -D {{ openldap.root_dn }} -w {{ openldap.root_password }}
+         -f {{ openldap.config_dir }}/keystone_user.ldif
+  register: keystone_user
+  failed_when: keystone_user.rc not in [0, 68]
+
+- name: ensure keystone_users access is created
+  shell: ldapmodify -Y EXTERNAL -H ldapi:///
+         -f {{ openldap.config_dir }}/keystone_user_access.ldif
+
+- name: set openldap log level
+  shell: ldapmodify -Q -Y EXTERNAL -H ldapi:/// -f {{ openldap.config_dir }}/logging.ldif
+
+- name: Install slapd service
+  upstart_service: name=slapd
+                   user=openldap
+                   cmd=/usr/sbin/slapd
+                   config_dirs=/etc/init
+                   config_files=/etc/init/slapd.conf
+
+- name: Start slapd service
+  service: name=slapd state=started enabled=yes
+
+# Ignore error if ldap return code is 32 - LDAP_NO_SUCH_OBJECT
+# Since delete policy is attempted when its not present
+- name: delete the policy if policy is changed from enabled to disabled.
+  command: ldapdelete -x -D {{openldap.root_dn }} -w {{ openldap.root_password }} {{ openldap.password_policy_dn }}
+  register: command_result
+  when: openldap.password_policy_enabled|bool == False
+  failed_when: command_result.rc not in [0, 32]
+
+- include: password_policy.yml
+  when: openldap.password_policy_enabled|bool
+
+- include: sync_provider.yml
+  when: groups['ldap'] | length > 1
+
+
+

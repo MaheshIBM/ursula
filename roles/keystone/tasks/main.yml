@@ -17,6 +17,10 @@
 - name: keystone config dir
   file: dest=/etc/keystone state=directory
 
+- name: keystone config dir
+  file: dest=/etc/keystone/domains state=directory
+  when: openldap.enabled|default('false')|bool
+
 - name: keystone log dir
   file: dest=/var/log/keystone state=directory mode=0755 owner=keystone
         group=keystone
@@ -30,6 +34,14 @@
   with_fileglob: ../templates/etc/keystone/*
   notify:
     - restart keystone services
+
+- name: configure keystone
+  template: src=etc/keystone/domains/keystone.Default.conf 
+            dest=/etc/keystone/domains/keystone.Default.conf 
+            mode=0644
+  notify:
+    - restart keystone services
+  when: openldap.enabled|default('false')|bool
 
 - name: stop keystone service before db sync
   service: name=keystone state=stopped
